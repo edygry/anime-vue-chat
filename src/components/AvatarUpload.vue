@@ -50,6 +50,7 @@ export default {
   bottom: 16px;
   right: 16px;
   z-index: 20;
+  pointer-events: auto;
 }
 
 .upload-btn {

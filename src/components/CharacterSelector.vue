@@ -104,6 +104,7 @@ export default {
   bottom: 16px;
   left: 16px;
   z-index: 20;
+  pointer-events: auto;
 }
 
 .selector-btn {
