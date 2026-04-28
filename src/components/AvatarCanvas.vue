@@ -14,7 +14,7 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { VRMLoaderPlugin } from '@pixiv/three-vrm'
@@ -48,6 +48,13 @@ export default {
 
     onUnmounted(() => {
       cleanup()
+    })
+
+    // Watch for avatar URL changes
+    watch(() => props.avatarUrl, (newUrl) => {
+      if (newUrl && scene) {
+        loadAvatar(newUrl)
+      }
     })
 
     async function initThreeJS() {
