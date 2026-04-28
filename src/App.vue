@@ -1,7 +1,13 @@
 <template>
   <div class="app">
     <!-- 3D Avatar Background -->
-    <AvatarCanvas :isSpeaking="isSpeaking" @ready="onAvatarReady" @error="onAvatarError" />
+    <AvatarCanvas
+      :isSpeaking="isSpeaking"
+      :avatarUrl="currentAvatar"
+      @ready="onAvatarReady"
+      @error="onAvatarError"
+      @avatarLoaded="onAvatarLoaded"
+    />
 
     <!-- Chat Interface -->
     <ChatInterface @message="onMessage" :isTyping="isTyping" />
@@ -10,14 +16,23 @@
     <div class="character-info">
       <div class="info-card">
         <div class="info-content">
-          <span class="character-emoji">🦊</span>
+          <span class="character-emoji">{{ currentCharacter.emoji }}</span>
           <div class="character-details">
-            <h2 class="character-name">Sakura</h2>
-            <p class="character-type">Fox Girl • Happy</p>
+            <h2 class="character-name">{{ currentCharacter.name }}</h2>
+            <p class="character-type">{{ currentCharacter.type }}</p>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Character Selector -->
+    <CharacterSelector
+      :currentCharacter="currentCharacter"
+      @select="onCharacterSelect"
+    />
+
+    <!-- Avatar Upload -->
+    <AvatarUpload @upload="onAvatarUpload" />
   </div>
 </template>
 
@@ -25,17 +40,28 @@
 import { ref } from 'vue'
 import AvatarCanvas from './components/AvatarCanvas.vue'
 import ChatInterface from './components/ChatInterface.vue'
+import CharacterSelector from './components/CharacterSelector.vue'
+import AvatarUpload from './components/AvatarUpload.vue'
 
 export default {
   name: 'App',
   components: {
     AvatarCanvas,
-    ChatInterface
+    ChatInterface,
+    CharacterSelector,
+    AvatarUpload
   },
   setup() {
     const isTyping = ref(false)
     const isSpeaking = ref(false)
     const avatarReady = ref(false)
+    const currentAvatar = ref('/avatars/rose.vrm')
+    const currentCharacter = ref({
+      name: 'Rose',
+      type: 'Human Girl • Calm',
+      file: '/avatars/rose.vrm',
+      emoji: '🌹'
+    })
 
     const onAvatarReady = () => {
       console.log('Avatar ready!')
@@ -46,6 +72,10 @@ export default {
       console.error('Avatar error:', error)
     }
 
+    const onAvatarLoaded = (data) => {
+      console.log('Avatar loaded:', data)
+    }
+
     const onMessage = (message) => {
       isTyping.value = true
       // Simulate typing delay
@@ -54,13 +84,29 @@ export default {
       }, 1500)
     }
 
+    const onCharacterSelect = (character) => {
+      currentCharacter.value = character
+      currentAvatar.value = character.file
+    }
+
+    const onAvatarUpload = (file) => {
+      console.log('Avatar uploaded:', file.name)
+      // The AvatarCanvas component will handle the upload
+      // We just need to trigger it through a ref or event
+    }
+
     return {
       isTyping,
       isSpeaking,
       avatarReady,
+      currentAvatar,
+      currentCharacter,
       onAvatarReady,
       onAvatarError,
-      onMessage
+      onAvatarLoaded,
+      onMessage,
+      onCharacterSelect,
+      onAvatarUpload
     }
   }
 }
