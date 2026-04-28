@@ -16,6 +16,8 @@
 <script>
 import { ref, onMounted, onUnmounted } from 'vue'
 import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { VRMLoaderPlugin } from '@pixiv/three-vrm'
 
 export default {
   name: 'AvatarCanvas',
@@ -23,9 +25,13 @@ export default {
     isSpeaking: {
       type: Boolean,
       default: false
+    },
+    avatarUrl: {
+      type: String,
+      default: '/avatars/rose.vrm'
     }
   },
-  emits: ['ready', 'error'],
+  emits: ['ready', 'error', 'avatarLoaded'],
   setup(props, { emit }) {
     const canvasContainer = ref(null)
     const canvas = ref(null)
@@ -33,7 +39,8 @@ export default {
     const error = ref(null)
     
     let scene, camera, renderer, animationId
-    let cube, avatarGroup
+    let currentVRM = null
+    let clock = new THREE.Clock()
 
     onMounted(() => {
       initThreeJS()
@@ -43,7 +50,7 @@ export default {
       cleanup()
     })
 
-    function initThreeJS() {
+    async function initThreeJS() {
       try {
         // Check WebGL support
         const testCanvas = document.createElement('canvas')
@@ -68,7 +75,7 @@ export default {
           0.1,
           1000
         )
-        camera.position.set(0, 1.5, 4)
+        camera.position.set(0, 1.0, 3)
 
         // Create renderer
         renderer = new THREE.WebGLRenderer({
@@ -81,110 +88,6 @@ export default {
         renderer.shadowMap.enabled = true
 
         console.log('Renderer created!')
-
-        // Create avatar group
-        avatarGroup = new THREE.Group()
-        scene.add(avatarGroup)
-
-        // Create test cube
-        const cubeGeometry = new THREE.BoxGeometry(1, 1, 1)
-        const cubeMaterial = new THREE.MeshStandardMaterial({
-          color: 0xff6b9d,
-          emissive: 0xff6b9d,
-          emissiveIntensity: 0.3
-        })
-        cube = new THREE.Mesh(cubeGeometry, cubeMaterial)
-        cube.position.set(0, 1.5, 0)
-        cube.castShadow = true
-        avatarGroup.add(cube)
-
-        // Create body
-        const bodyGeometry = new THREE.CapsuleGeometry(0.5, 1.5, 8, 16)
-        const bodyMaterial = new THREE.MeshStandardMaterial({
-          color: 0xff6b9d,
-          emissive: 0xff6b9d,
-          emissiveIntensity: 0.3,
-          roughness: 0.3,
-          metalness: 0.1
-        })
-        const body = new THREE.Mesh(bodyGeometry, bodyMaterial)
-        body.position.set(0, 1.2, 0)
-        body.castShadow = true
-        avatarGroup.add(body)
-
-        // Create head
-        const headGeometry = new THREE.SphereGeometry(0.4, 32, 32)
-        const headMaterial = new THREE.MeshStandardMaterial({
-          color: 0xffb6c1,
-          emissive: 0xffb6c1,
-          emissiveIntensity: 0.2,
-          roughness: 0.2,
-          metalness: 0.05
-        })
-        const head = new THREE.Mesh(headGeometry, headMaterial)
-        head.position.set(0, 2.2, 0)
-        head.castShadow = true
-        avatarGroup.add(head)
-
-        // Create eyes
-        const eyeGeometry = new THREE.SphereGeometry(0.08, 16, 16)
-        const eyeMaterial = new THREE.MeshStandardMaterial({
-          color: 0x000000,
-          emissive: 0x000000,
-          emissiveIntensity: 0.5
-        })
-
-        const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial)
-        leftEye.position.set(-0.12, 2.25, 0.35)
-        avatarGroup.add(leftEye)
-
-        const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial)
-        rightEye.position.set(0.12, 2.25, 0.35)
-        avatarGroup.add(rightEye)
-
-        // Create hair
-        const hairGeometry = new THREE.SphereGeometry(0.45, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2)
-        const hairMaterial = new THREE.MeshStandardMaterial({
-          color: 0xff69b4,
-          emissive: 0xff69b4,
-          emissiveIntensity: 0.2,
-          roughness: 0.4,
-          metalness: 0.1
-        })
-        const hair = new THREE.Mesh(hairGeometry, hairMaterial)
-        hair.position.set(0, 2.3, -0.1)
-        avatarGroup.add(hair)
-
-        // Create ears
-        const earGeometry = new THREE.ConeGeometry(0.15, 0.4, 8)
-        const earMaterial = new THREE.MeshStandardMaterial({
-          color: 0xff69b4,
-          emissive: 0xff69b4,
-          emissiveIntensity: 0.2
-        })
-
-        const leftEar = new THREE.Mesh(earGeometry, earMaterial)
-        leftEar.position.set(-0.3, 2.5, 0)
-        leftEar.rotation.z = 0.4
-        avatarGroup.add(leftEar)
-
-        const rightEar = new THREE.Mesh(earGeometry, earMaterial)
-        rightEar.position.set(0.3, 2.5, 0)
-        rightEar.rotation.z = -0.4
-        avatarGroup.add(rightEar)
-
-        // Create ground
-        const groundGeometry = new THREE.PlaneGeometry(10, 10)
-        const groundMaterial = new THREE.MeshStandardMaterial({
-          color: 0x0a0a0f,
-          roughness: 0.8,
-          metalness: 0.2
-        })
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial)
-        ground.rotation.x = -Math.PI / 2
-        ground.position.y = 0
-        ground.receiveShadow = true
-        scene.add(ground)
 
         // Create lights
         const ambientLight = new THREE.AmbientLight(0xffffff, 2.0)
@@ -203,7 +106,23 @@ export default {
         rimLight.position.set(0, 3, -3)
         scene.add(rimLight)
 
+        // Create ground
+        const groundGeometry = new THREE.PlaneGeometry(10, 10)
+        const groundMaterial = new THREE.MeshStandardMaterial({
+          color: 0x0a0a0f,
+          roughness: 0.8,
+          metalness: 0.2
+        })
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial)
+        ground.rotation.x = -Math.PI / 2
+        ground.position.y = 0
+        ground.receiveShadow = true
+        scene.add(ground)
+
         console.log('Scene created!')
+
+        // Load default avatar
+        await loadAvatar(props.avatarUrl)
 
         // Start animation loop
         isReady.value = true
@@ -220,22 +139,118 @@ export default {
       }
     }
 
+    async function loadAvatar(url) {
+      try {
+        // Dispose current VRM if exists
+        if (currentVRM) {
+          if (currentVRM.scene) {
+            scene.remove(currentVRM.scene)
+          }
+          currentVRM = null
+        }
+
+        // Create loader
+        const loader = new GLTFLoader()
+        loader.register((parser) => {
+          return new VRMLoaderPlugin(parser)
+        })
+
+        // Load VRM
+        const gltf = await loader.loadAsync(url)
+        const vrm = gltf.userData.vrm
+
+        if (!vrm) {
+          throw new Error('No VRM data found in file')
+        }
+
+        currentVRM = vrm
+        scene.add(vrm.scene)
+
+        // Reset VRM position
+        vrm.scene.position.set(0, 0, 0)
+
+        console.log('VRM loaded:', url)
+        emit('avatarLoaded', {
+          url,
+          meta: vrm.meta
+        })
+
+      } catch (e) {
+        console.error('Failed to load avatar:', e)
+        // Fallback to geometric avatar
+        createFallbackAvatar()
+      }
+    }
+
+    function createFallbackAvatar() {
+      // Create a simple geometric avatar as fallback
+      const group = new THREE.Group()
+
+      // Body
+      const bodyGeometry = new THREE.CapsuleGeometry(0.3, 1.0, 8, 16)
+      const bodyMaterial = new THREE.MeshStandardMaterial({
+        color: 0xff6b9d,
+        emissive: 0xff6b9d,
+        emissiveIntensity: 0.3
+      })
+      const body = new THREE.Mesh(bodyGeometry, bodyMaterial)
+      body.position.set(0, 1.0, 0)
+      group.add(body)
+
+      // Head
+      const headGeometry = new THREE.SphereGeometry(0.25, 32, 32)
+      const headMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffb6c1,
+        emissive: 0xffb6c1,
+        emissiveIntensity: 0.2
+      })
+      const head = new THREE.Mesh(headGeometry, headMaterial)
+      head.position.set(0, 1.8, 0)
+      group.add(head)
+
+      scene.add(group)
+      currentVRM = { 
+        scene: group,
+        update: function() {} // Dummy update method
+      }
+    }
+
     function animate() {
       animationId = requestAnimationFrame(animate)
 
-      const time = Date.now() * 0.001
+      const delta = clock.getDelta()
+      const time = clock.elapsedTime
 
-      // Rotate cube
-      if (cube) {
-        cube.rotation.x += 0.01
-        cube.rotation.y += 0.01
-      }
+      // Update VRM animation
+      if (currentVRM) {
+        // Call VRM update if it exists (VRM v2/v3 API)
+        if (currentVRM.update && typeof currentVRM.update === 'function') {
+          currentVRM.update(delta)
+        }
 
-      // Animate avatar
-      if (avatarGroup) {
-        // Breathing animation
-        avatarGroup.position.y = Math.sin(time * 2) * 0.03
-        avatarGroup.rotation.y = Math.sin(time * 0.5) * 0.1
+        // Idle animation - body sway
+        if (currentVRM.scene) {
+          currentVRM.scene.rotation.y = Math.sin(time * 0.5) * 0.05
+        }
+
+        // Breathing animation on chest bone
+        if (currentVRM.humanoid) {
+          try {
+            const chest = currentVRM.humanoid.getNormalizedBoneTransform('chest')
+            if (chest) {
+              const breathe = Math.sin(time * 2) * 0.02
+              chest.scale.set(1 + breathe, 1 + breathe, 1 + breathe)
+            }
+
+            const head = currentVRM.humanoid.getNormalizedBoneTransform('head')
+            if (head) {
+              const bob = Math.sin(time * 3) * 0.02
+              head.rotation.x = bob
+            }
+          } catch (e) {
+            // Ignore bone transform errors
+          }
+        }
       }
 
       // Render
@@ -262,11 +277,23 @@ export default {
       window.removeEventListener('resize', onWindowResize)
     }
 
+    // Expose methods for parent components
+    function switchAvatar(url) {
+      loadAvatar(url)
+    }
+
+    function uploadAvatar(file) {
+      const url = URL.createObjectURL(file)
+      loadAvatar(url)
+    }
+
     return {
       canvasContainer,
       canvas,
       isReady,
-      error
+      error,
+      switchAvatar,
+      uploadAvatar
     }
   }
 }
