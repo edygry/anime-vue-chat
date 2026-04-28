@@ -26,7 +26,7 @@ export default {
     }
   },
   emits: ['ready', 'error'],
-  setup(props) {
+  setup(props, { emit }) {
     const canvasContainer = ref(null)
     const canvas = ref(null)
     const isReady = ref(false)
